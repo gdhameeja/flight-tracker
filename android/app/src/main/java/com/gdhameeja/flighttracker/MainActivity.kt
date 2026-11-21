@@ -130,6 +130,10 @@ private fun App(vm: MainViewModel, openFlight: MutableState<String?>) {
                 onRefresh = { vm.refresh(id) },
                 onReload = { vm.reload(id) },
                 onDelete = { vm.delete(id); nav.popBackStack() },
+                connections = state.connections,
+                loadWeather = { vm.weather(id) },
+                loadAlternatives = { vm.alternatives(id) },
+                loadAircraft = { vm.aircraft(id) },
             )
         }
         composable("add") {
@@ -158,6 +162,7 @@ private fun App(vm: MainViewModel, openFlight: MutableState<String?>) {
                 onPair = { vm.pair(it) },
                 onCheckUpdate = { vm.checkForUpdate(manual = true) }, onInstall = { vm.installUpdate() },
                 onShown = { vm.loadUsage() },
+                onCheckedBags = { vm.setCheckedBags(it) },
             )
         }
     }

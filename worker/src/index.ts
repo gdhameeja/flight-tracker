@@ -6,9 +6,11 @@
 import { diff } from "./changes";
 import type { Flight, FlightEvent } from "./model";
 import { fetchFlight, ProviderError } from "./providers/aerodatabox";
+import { aircraft, alternatives, connections, extras, runAlerts, weatherFor, wifiGuess } from "./features";
 import { HISTORY_DAYS, scanGmail } from "./importer";
-import { sendPush, type ServiceAccount } from "./push";
+import { sendData, sendPush, type ServiceAccount } from "./push";
 import { nextCheckAt } from "./schedule";
+import { getMeta, getSettings, HttpError, localTime, recordUnits, requireUnits, setMeta, unitsLeft } from "./util";
 
 export interface Env {
   DB: D1Database;
@@ -62,6 +64,7 @@ export default {
       (async () => {
         await runDueChecks(env);
         await runGmailScan(env, false).catch((e) => console.error("Gmail scan failed", e));
+        await runAlerts(env).catch((e) => console.error("Alerts failed", e));
         await deliverPending(env);
       })(),
     );
@@ -82,7 +85,13 @@ async function route(req: Request, env: Env): Promise<Response> {
   authorize(req, env);
 
   if (path === "/api/pair" && m === "POST") return json(await startPairing(env));
-  if (path === "/api/flights" && m === "GET") return json({ flights: await listFlights(env) });
+  if (path === "/api/flights" && m === "GET") return json({ flights: await listFlights(env), connections: await connections(env) });
+  if (path === "/api/settings" && m === "GET") return json(await getSettings(env));
+  if (path === "/api/settings" && m === "PUT") {
+    const b = (await req.json().catch(() => ({}))) as { checkedBags?: boolean };
+    if (typeof b.checkedBags === "boolean") await setMeta(env, "checked_bags", b.checkedBags ? "1" : "0");
+    return json(await getSettings(env));
+  }
   if (path === "/api/flights" && m === "POST") return addFlight(req, env);
   if (path === "/api/usage" && m === "GET") return json(await usage(env));
   if (path === "/api/gmail/scan" && m === "POST") return json(await runGmailScan(env, true));
@@ -92,6 +101,16 @@ async function route(req: Request, env: Env): Promise<Response> {
     if (!token) throw new HttpError(400, "token missing");
     await setMeta(env, "fcm_token", token);
     return json({ ok: true, pushEnabled: !!env.FCM_SERVICE_ACCOUNT });
+  }
+
+  const sub = path.match(/^\/api\/flights\/([\w-]+)\/(weather|alternatives|aircraft)$/);
+  if (sub && m === "GET") {
+    const f = JSON.parse((await getRow(env, sub[1])).data) as Flight;
+    if (sub[2] === "weather") return json(await weatherFor(f));
+    if (sub[2] === "alternatives") return json({ flights: await alternatives(env, f) });
+    if (!f.aircraft.reg) return json({ aircraft: null, wifi: wifiGuess(f.airline.iata, f.aircraft.model) });
+    const a = await aircraft(env, f.aircraft.reg, f.airline.iata);
+    return json({ aircraft: a, wifi: a?.wifi ?? wifiGuess(f.airline.iata, f.aircraft.model) });
   }
 
   const one = path.match(/^\/api\/flights\/([\w-]+)(\/refresh)?$/);
@@ -161,6 +180,7 @@ async function flightView(env: Env, row: FlightRow) {
     flight: JSON.parse(row.data) as Flight,
     nextCheckAt: row.next_check_at ? new Date(row.next_check_at).toISOString() : null,
     events,
+    extras: extras(JSON.parse(row.data) as Flight, (await getSettings(env)).checkedBags),
     booking: b ? { pnr: b.pnr, seats: b.seats, passengers: b.passengers ? (JSON.parse(b.passengers) as string[]) : [], airlineName: b.airline_name } : null,
   };
 }
@@ -241,9 +261,13 @@ async function runDueChecks(env: Env) {
     return;
   }
   const due = (await env.DB.prepare("select * from flights where next_check_at is not null and next_check_at <= ? order by next_check_at limit ?").bind(Date.now(), CRON_BATCH).all<FlightRow>()).results;
+  let travelDay = false;
   for (const row of due) {
     try {
       await refreshRow(env, row);
+      const f = JSON.parse(row.data) as Flight;
+      const dep = Date.parse(f.departure.scheduled ?? "");
+      if (!Number.isNaN(dep) && dep - Date.now() < 6 * 3600_000 && Date.now() - dep < 24 * 3600_000) travelDay = true;
     } catch (e) {
       console.error(`Checking ${row.number} ${row.date} failed`, e);
       // Don't hammer a failing provider: next try in 30 minutes
@@ -251,6 +275,15 @@ async function runDueChecks(env: Env) {
     }
   }
   await deliverPending(env);
+  if (travelDay) await syncPhone(env);
+}
+
+/** Quiet push: the phone refreshes its pinned notification and widget. */
+async function syncPhone(env: Env) {
+  if (!env.FCM_SERVICE_ACCOUNT) return;
+  const device = await getMeta(env, "fcm_token");
+  if (!device) return;
+  await sendData(JSON.parse(env.FCM_SERVICE_ACCOUNT) as ServiceAccount, device, { type: "sync" }).catch((e) => console.error("Sync push failed", e));
 }
 
 // ── Gmail import ────────────────────────────────────────────────────────────
@@ -308,33 +341,8 @@ async function deliverPending(env: Env) {
   }
 }
 
-async function getMeta(env: Env, key: string): Promise<string | null> {
-  return (await env.DB.prepare("select value from meta where key = ?").bind(key).first<{ value: string }>())?.value ?? null;
-}
-
-async function setMeta(env: Env, key: string, value: string) {
-  await env.DB.prepare("insert into meta (key, value) values (?, ?) on conflict (key) do update set value = excluded.value").bind(key, value).run();
-}
 
 // ── API budget ──────────────────────────────────────────────────────────────
-
-async function unitsLeft(env: Env): Promise<number | null> {
-  const r = await env.DB.prepare("select value from meta where key = 'adb_units_remaining'").first<{ value: string }>();
-  return r ? Number(r.value) : null;
-}
-
-async function recordUnits(env: Env, remaining: number | null) {
-  if (remaining === null || Number.isNaN(remaining)) return;
-  await env.DB.batch([
-    env.DB.prepare("insert into meta (key, value) values ('adb_units_remaining', ?) on conflict (key) do update set value = excluded.value").bind(String(remaining)),
-    env.DB.prepare("insert into meta (key, value) values ('adb_units_at', ?) on conflict (key) do update set value = excluded.value").bind(new Date().toISOString()),
-  ]);
-}
-
-async function requireUnits(env: Env, reserve: number) {
-  const left = await unitsLeft(env);
-  if (left !== null && left < reserve) throw new HttpError(429, `Only ${left} AeroDataBox units left this month`);
-}
 
 async function usage(env: Env) {
   const at = await env.DB.prepare("select value from meta where key = 'adb_units_at'").first<{ value: string }>();
@@ -377,18 +385,8 @@ function page(body: string): Response {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-class HttpError extends Error {
-  constructor(readonly status: number, message: string) {
-    super(message);
-  }
-}
-
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8" } });
-}
-
-function localTime(iso: string, tz: string | null): string {
-  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz ?? "UTC" }).format(new Date(iso));
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

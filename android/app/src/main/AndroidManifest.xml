@@ -5,6 +5,11 @@
     <!-- "Check for updates" installs the new APK from GitHub -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Drive time to the airport: a rough location, only while you use the app -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- "Time to leave" alert on the minute. USE_EXACT_ALARM is fine outside the Play Store -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
 
     <application
         android:allowBackup="true"
@@ -38,6 +43,20 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <receiver android:name=".live.LeaveReceiver" android:exported="false" />
+
+        <receiver
+            android:name=".widget.NextFlightWidgetReceiver"
+            android:exported="false"
+            android:label="Next flight">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/next_flight_widget" />
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

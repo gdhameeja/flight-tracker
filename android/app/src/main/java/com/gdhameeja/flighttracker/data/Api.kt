@@ -21,7 +21,18 @@ class Api(private val settings: Settings) {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    suspend fun flights(): List<TrackedFlight> = json.decodeFromString<FlightList>(call("GET", "/api/flights")).flights
+    suspend fun flights(): FlightList = json.decodeFromString(call("GET", "/api/flights"))
+
+    suspend fun weather(id: String): FlightWeather = json.decodeFromString(call("GET", "/api/flights/$id/weather"))
+
+    suspend fun alternatives(id: String): Alternatives = json.decodeFromString(call("GET", "/api/flights/$id/alternatives"))
+
+    suspend fun aircraft(id: String): AircraftResult = json.decodeFromString(call("GET", "/api/flights/$id/aircraft"))
+
+    suspend fun userSettings(): UserSettings = json.decodeFromString(call("GET", "/api/settings"))
+
+    suspend fun saveUserSettings(s: UserSettings): UserSettings =
+        json.decodeFromString(call("PUT", "/api/settings", json.encodeToString(UserSettings.serializer(), s)))
 
     suspend fun flight(id: String): TrackedFlight = json.decodeFromString(call("GET", "/api/flights/$id"))
 

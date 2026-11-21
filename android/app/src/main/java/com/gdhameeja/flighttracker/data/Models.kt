@@ -65,6 +65,15 @@ data class Booking(
     val airlineName: String? = null,
 )
 
+/** Check-in and airport timing, worked out by the server. */
+@Serializable
+data class Extras(
+    val checkinUrl: String? = null,
+    val checkinOpensAt: String? = null,
+    val beAtAirportBy: String? = null,
+    val international: Boolean = false,
+)
+
 /** A tracked flight as the server returns it. */
 @Serializable
 data class TrackedFlight(
@@ -73,10 +82,74 @@ data class TrackedFlight(
     val nextCheckAt: String? = null,
     val events: List<FlightEvent> = emptyList(),
     val booking: Booking? = null,
+    val extras: Extras? = null,
 )
 
 @Serializable
-data class FlightList(val flights: List<TrackedFlight>)
+data class Step(val label: String, val minutes: Int)
+
+/** Two flights in a row at the same airport (worker/src/connections.ts). */
+@Serializable
+data class Connection(
+    val fromId: String,
+    val toId: String,
+    val airport: String,
+    val layoverMin: Int,
+    val neededMin: Int,
+    val slackMin: Int,
+    val level: String, // comfortable, tight, at_risk, long
+    val selfTransfer: Boolean,
+    val steps: List<Step> = emptyList(),
+    val notes: List<String> = emptyList(),
+)
+
+@Serializable
+data class FlightList(val flights: List<TrackedFlight>, val connections: List<Connection> = emptyList())
+
+@Serializable
+data class Conditions(
+    val visibilityM: Int? = null,
+    val windKt: Int? = null,
+    val gustKt: Int? = null,
+    val weather: String? = null,
+    val tempC: Double? = null,
+)
+
+@Serializable
+data class WeatherRisk(val level: String, val text: String)
+
+@Serializable
+data class AirportWeather(val icao: String, val now: Conditions? = null, val atFlight: Conditions? = null, val risk: WeatherRisk? = null)
+
+@Serializable
+data class FlightWeather(val departure: AirportWeather? = null, val arrival: AirportWeather? = null)
+
+@Serializable
+data class Alternative(val number: String, val airline: String? = null, val departure: String? = null, val terminal: String? = null, val status: String = "")
+
+@Serializable
+data class Alternatives(val flights: List<Alternative> = emptyList())
+
+@Serializable
+data class Wifi(val likely: String, val note: String)
+
+@Serializable
+data class AircraftInfo(
+    val reg: String,
+    val model: String? = null,
+    val typeName: String? = null,
+    val airline: String? = null,
+    val ageYears: Double? = null,
+    val firstFlight: String? = null,
+    val seats: Int? = null,
+    val engines: String? = null,
+)
+
+@Serializable
+data class AircraftResult(val aircraft: AircraftInfo? = null, val wifi: Wifi? = null)
+
+@Serializable
+data class UserSettings(val checkedBags: Boolean = true)
 
 /** One flight number, several legs: which one is yours? */
 @Serializable

@@ -20,6 +20,11 @@ let cached: { token: string; expires: number } | null = null;
 
 /** Sends one alert. Returns false when the phone's token is no longer valid. */
 export async function sendPush(sa: ServiceAccount, deviceToken: string, msg: PushMessage): Promise<boolean> {
+  return sendData(sa, deviceToken, { title: msg.title, body: msg.body, flightId: msg.flightId, eventId: String(msg.eventId) });
+}
+
+/** A data message: alerts (with title/body) or a quiet { type: "sync" } that refreshes the app's widget and pinned notification. */
+export async function sendData(sa: ServiceAccount, deviceToken: string, data: Record<string, string>): Promise<boolean> {
   const access = await accessToken(sa);
   const res = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
     method: "POST",
@@ -28,7 +33,7 @@ export async function sendPush(sa: ServiceAccount, deviceToken: string, msg: Pus
       message: {
         token: deviceToken,
         // Data-only: the app builds the notification itself (channel, tap to open the flight)
-        data: { title: msg.title, body: msg.body, flightId: msg.flightId, eventId: String(msg.eventId) },
+        data,
         android: { priority: "high", ttl: "3600s" },
       },
     }),

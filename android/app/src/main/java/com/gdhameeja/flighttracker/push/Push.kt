@@ -81,6 +81,9 @@ class FlightMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val d = message.data
+        // Quiet "something changed" from the server: refresh the pinned notification and widget
+        com.gdhameeja.flighttracker.live.Sync.pull(applicationContext)
+        if (d["type"] == "sync") return
         val title = d["title"] ?: message.notification?.title ?: return
         val body = d["body"] ?: message.notification?.body.orEmpty()
         val id = d["eventId"]?.toIntOrNull() ?: (System.currentTimeMillis() % Int.MAX_VALUE).toInt()

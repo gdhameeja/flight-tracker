@@ -6,9 +6,13 @@ import androidx.lifecycle.viewModelScope
 import com.gdhameeja.flighttracker.data.AddResult
 import com.gdhameeja.flighttracker.data.Api
 import com.gdhameeja.flighttracker.data.ApiException
+import com.gdhameeja.flighttracker.data.Connection
+import com.gdhameeja.flighttracker.data.FlightList
 import com.gdhameeja.flighttracker.data.Settings
 import com.gdhameeja.flighttracker.data.TrackedFlight
 import com.gdhameeja.flighttracker.data.Usage
+import com.gdhameeja.flighttracker.data.UserSettings
+import com.gdhameeja.flighttracker.live.Sync
 import com.gdhameeja.flighttracker.update.Updater
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +21,8 @@ import kotlinx.coroutines.launch
 
 data class UiState(
     val flights: List<TrackedFlight> = emptyList(),
+    val connections: List<Connection> = emptyList(),
+    val userSettings: UserSettings? = null,
     val refreshing: Boolean = false,
     val connected: Boolean = false,
     val message: String? = null,
@@ -31,7 +37,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val api = Api(settings)
     val updater = Updater(app)
 
-    private val _state = MutableStateFlow(UiState(flights = settings.loadFlights(), connected = settings.isConnected))
+    private val _state = settings.loadFlights().let { MutableStateFlow(UiState(flights = it.flights, connections = it.connections, connected = settings.isConnected)) }
     val state: StateFlow<UiState> = _state
 
     init {
@@ -51,8 +57,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!quiet) _state.update { it.copy(refreshing = true) }
         try {
             val list = api.flights()
-            settings.saveFlights(list)
-            _state.update { it.copy(flights = list) }
+            store(list)
         } catch (e: ApiException) {
             if (!quiet) say(e.message ?: "Couldn't load")
         } finally {
@@ -78,11 +83,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun replace(f: TrackedFlight) {
-        _state.update { s ->
-            val list = if (s.flights.any { it.id == f.id }) s.flights.map { if (it.id == f.id) f else it } else s.flights + f
-            settings.saveFlights(list)
-            s.copy(flights = list)
-        }
+        val s = _state.value
+        val list = if (s.flights.any { it.id == f.id }) s.flights.map { if (it.id == f.id) f else it } else s.flights + f
+        store(FlightList(list, s.connections))
+        // Times changed: the connections may have too
+        load(quiet = true)
+    }
+
+    /** Keeps the list, saves it for offline, and updates the widget and travel-day notification. */
+    private fun store(list: FlightList) {
+        settings.saveFlights(list)
+        _state.update { it.copy(flights = list.flights, connections = list.connections) }
+        Sync.onFlights(getApplication(), list)
     }
 
     suspend fun add(number: String, date: String, from: String?): Result<AddResult> = runCatching {
@@ -94,7 +106,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun delete(id: String) = viewModelScope.launch {
         try {
             api.delete(id)
-            _state.update { s -> s.copy(flights = s.flights.filterNot { it.id == id }).also { settings.saveFlights(it.flights) } }
+            val s = _state.value
+            store(FlightList(s.flights.filterNot { it.id == id }, s.connections.filterNot { it.fromId == id || it.toId == id }))
         } catch (e: ApiException) {
             say(e.message ?: "Couldn't delete")
         }
@@ -131,7 +144,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun loadUsage() = viewModelScope.launch {
         runCatching { api.usage() }.onSuccess { u -> _state.update { it.copy(usage = u) } }
+        runCatching { api.userSettings() }.onSuccess { u -> _state.update { it.copy(userSettings = u) } }
     }
+
+    fun setCheckedBags(on: Boolean) = viewModelScope.launch {
+        _state.update { it.copy(userSettings = UserSettings(on)) }
+        runCatching { api.saveUserSettings(UserSettings(on)) }
+            .onSuccess { load(quiet = true) }
+            .onFailure { say("Couldn't save: ${it.message}") }
+    }
+
+    // On-demand extras for the flight screen (weather is free; the others use AeroDataBox units)
+    suspend fun weather(id: String) = runCatching { api.weather(id) }
+    suspend fun alternatives(id: String) = runCatching { api.alternatives(id) }
+    suspend fun aircraft(id: String) = runCatching { api.aircraft(id) }
 
     fun checkForUpdate(manual: Boolean) = viewModelScope.launch {
         _state.update { it.copy(updateChecking = true) }

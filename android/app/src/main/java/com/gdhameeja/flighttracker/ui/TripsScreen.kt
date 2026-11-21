@@ -99,7 +99,14 @@ fun TripsScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(list, key = { it.id }) { t: TrackedFlight -> FlightCard(t.flight, onClick = { onOpen(t.id) }) }
+                        if (tab == 1) item { StatsCard(stats(past)) }
+                        items(list, key = { it.id }) { t: TrackedFlight ->
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FlightCard(t.flight, onClick = { onOpen(t.id) })
+                                // A connection to the next flight sits right under this one
+                                if (tab == 0) state.connections.firstOrNull { it.fromId == t.id }?.let { ConnectionCard(it) }
+                            }
+                        }
                     }
                 }
             }

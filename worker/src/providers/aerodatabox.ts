@@ -146,3 +146,50 @@ export function normalize(r: AdbFlight, date: string, fetchedAt: string): Flight
     fetchedAt,
   };
 }
+
+/** Departures from an airport between two local times (at most 12 hours apart). 2 units. */
+export async function fetchDepartures(key: string, iata: string, fromLocal: string, toLocal: string): Promise<AdbResult> {
+  const url = `https://${HOST}/flights/airports/iata/${iata}/${fromLocal}/${toLocal}?direction=Departure&withLeg=true&withCancelled=true&withCodeshared=false&withCargo=false&withPrivate=false`;
+  const res = await fetch(url, { headers: { "X-RapidAPI-Key": key, "X-RapidAPI-Host": HOST } });
+  const remaining = res.headers.get("x-ratelimit-api-units-remaining");
+  const unitsRemaining = remaining === null ? null : Number(remaining);
+  if (res.status === 204) return { flights: [], unitsRemaining };
+  if (!res.ok) throw new ProviderError(`AeroDataBox ${res.status}: ${(await res.text()).slice(0, 200)}`, res.status);
+  const raw = (await res.json()) as { departures?: AdbFlight[] };
+  const fetchedAt = new Date().toISOString();
+  return { flights: (raw.departures ?? []).map((r) => normalize(r, fromLocal.slice(0, 10), fetchedAt)), unitsRemaining };
+}
+
+export interface AircraftInfo {
+  reg: string;
+  model: string | null;
+  typeName: string | null;
+  airline: string | null;
+  ageYears: number | null;
+  firstFlight: string | null;
+  seats: number | null;
+  engines: string | null;
+}
+
+/** An aircraft by registration (age, type, seats). 1 unit; callers cache it. */
+export async function fetchAircraft(key: string, reg: string): Promise<{ aircraft: AircraftInfo | null; unitsRemaining: number | null }> {
+  const res = await fetch(`https://${HOST}/aircrafts/reg/${encodeURIComponent(reg)}`, { headers: { "X-RapidAPI-Key": key, "X-RapidAPI-Host": HOST } });
+  const remaining = res.headers.get("x-ratelimit-api-units-remaining");
+  const unitsRemaining = remaining === null ? null : Number(remaining);
+  if (res.status === 204 || res.status === 404) return { aircraft: null, unitsRemaining };
+  if (!res.ok) throw new ProviderError(`AeroDataBox ${res.status}: ${(await res.text()).slice(0, 200)}`, res.status);
+  const a = (await res.json()) as Record<string, any>;
+  return {
+    aircraft: {
+      reg: a.reg ?? reg,
+      model: a.modelCode ?? a.model ?? null,
+      typeName: a.typeName ?? a.productionLine ?? null,
+      airline: a.airlineName ?? null,
+      ageYears: typeof a.ageYears === "number" ? a.ageYears : null,
+      firstFlight: a.firstFlightDate ?? a.deliveryDate ?? null,
+      seats: typeof a.numSeats === "number" ? a.numSeats : null,
+      engines: a.engineType ?? (a.numEngines ? `${a.numEngines} engines` : null),
+    },
+    unitsRemaining,
+  };
+}

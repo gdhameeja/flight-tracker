@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Flights</string>
+    <string name="widget_description">Your next flight: status, gate and countdown</string>
 </resources>

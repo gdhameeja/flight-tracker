@@ -59,6 +59,7 @@ fun SettingsScreen(
     onCheckUpdate: () -> Unit,
     onInstall: () -> Unit,
     onShown: () -> Unit,
+    onCheckedBags: (Boolean) -> Unit = {},
 ) {
     var url by remember(serverUrl) { mutableStateOf(serverUrl) }
     var tok by remember(token) { mutableStateOf(token) }
@@ -146,6 +147,23 @@ fun SettingsScreen(
                         FilledTonalButton(onClick = { onConnect(url, tok) }, enabled = url.isNotBlank() && tok.isNotBlank(), modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
                             Text("Save and test")
                         }
+                    }
+                }
+            }
+
+            // ── How you travel ───────────────────────────────────────────
+            state.userSettings?.let { us ->
+                SectionTitle("How you travel")
+                DetailCard {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("I usually check a bag", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Changes connection times and when to be at the airport. Off: cabin bag only.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        androidx.compose.material3.Switch(checked = us.checkedBags, onCheckedChange = onCheckedBags)
                     }
                 }
             }

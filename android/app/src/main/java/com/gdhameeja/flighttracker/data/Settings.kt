@@ -23,10 +23,10 @@ class Settings(private val context: Context) {
 
     private val cacheFile get() = File(context.filesDir, "flights.json")
 
-    fun saveFlights(list: List<TrackedFlight>) {
-        runCatching { cacheFile.writeText(json.encodeToString(FlightList.serializer(), FlightList(list))) }
+    fun saveFlights(list: FlightList) {
+        runCatching { cacheFile.writeText(json.encodeToString(FlightList.serializer(), list)) }
     }
 
-    fun loadFlights(): List<TrackedFlight> =
-        runCatching { json.decodeFromString(FlightList.serializer(), cacheFile.readText()).flights }.getOrDefault(emptyList())
+    fun loadFlights(): FlightList =
+        runCatching { json.decodeFromString(FlightList.serializer(), cacheFile.readText()) }.getOrDefault(FlightList(emptyList()))
 }

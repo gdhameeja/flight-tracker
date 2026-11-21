@@ -49,7 +49,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.gdhameeja.flighttracker.data.AircraftResult
+import com.gdhameeja.flighttracker.data.Alternatives
+import com.gdhameeja.flighttracker.data.Connection
 import com.gdhameeja.flighttracker.data.FlightEnd
+import com.gdhameeja.flighttracker.data.FlightWeather
 import com.gdhameeja.flighttracker.data.TrackedFlight
 import kotlinx.coroutines.delay
 
@@ -63,6 +67,10 @@ fun FlightScreen(
     onRefresh: () -> Unit,
     onReload: () -> Unit,
     onDelete: () -> Unit,
+    connections: List<Connection> = emptyList(),
+    loadWeather: suspend () -> Result<FlightWeather> = { Result.failure(Exception()) },
+    loadAlternatives: suspend () -> Result<Alternatives> = { Result.failure(Exception()) },
+    loadAircraft: suspend () -> Result<AircraftResult> = { Result.failure(Exception()) },
 ) {
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -118,6 +126,21 @@ fun FlightScreen(
                     }
                 }
 
+                // Cancelled or very late: what else flies this route
+                item { Spacer(Modifier.height(12.dp)); AlternativesCard(f, loadAlternatives) }
+
+                // Connections this flight is part of
+                connections.filter { it.fromId == tracked.id || it.toId == tracked.id }.forEach { c ->
+                    item { SectionTitle(if (c.fromId == tracked.id) "Your next connection" else "Arriving from your previous flight") }
+                    item { ConnectionCard(c, startExpanded = c.level == "tight" || c.level == "at_risk") }
+                }
+
+                if (!f.isFinished() && !f.isInAir()) {
+                    item { SectionTitle("Before you fly") }
+                    item { CheckInCard(tracked) }
+                    item { Spacer(Modifier.height(10.dp)); AirportTripCard(tracked) }
+                }
+
                 tracked.booking?.takeIf { it.pnr != null || it.seats != null || it.passengers.isNotEmpty() }?.let { b ->
                     item { SectionTitle("Booking") }
                     item {
@@ -134,15 +157,14 @@ fun FlightScreen(
                 item { SectionTitle("Arrival") }
                 item { EndDetails(f.arrival, isDeparture = false) }
 
-                if (f.aircraft.model != null || f.aircraft.reg != null) {
-                    item { SectionTitle("Aircraft") }
-                    item {
-                        DetailCard {
-                            f.aircraft.model?.let { DetailRow("Type", it) }
-                            f.aircraft.reg?.let { DetailRow("Registration", it) }
-                        }
-                    }
+                // Weather once it matters: within 3 days of departure, until landing
+                val depAt = Fmt.instant(f.departure.best)
+                if (!f.isFinished() && depAt != null && java.time.Duration.between(java.time.Instant.now(), depAt).toDays() < 3) {
+                    item { SectionTitle("Weather") }
+                    item { WeatherCard(f, loadWeather) }
                 }
+
+                item { AircraftCard(f, loadAircraft) }
 
                 if (tracked.events.isNotEmpty()) {
                     item { SectionTitle("Updates") }
