@@ -5,6 +5,7 @@ import com.gdhameeja.flighttracker.data.Flight
 import com.gdhameeja.flighttracker.data.FlightEnd
 import com.gdhameeja.flighttracker.ui.Fmt
 import com.gdhameeja.flighttracker.ui.Tone
+import com.gdhameeja.flighttracker.ui.endsAt
 import com.gdhameeja.flighttracker.ui.statusInfo
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -40,5 +41,12 @@ class FormatTest {
     @Test fun cancelledWins() {
         val f = Flight(number = "AI 101", date = "2026-11-21", status = "cancelled")
         assertEquals(Tone.Bad, f.statusInfo().tone)
+    }
+
+    @Test fun pastFlightWithoutTimesIsOver() {
+        val f = Flight(number = "AI 930", date = "2026-10-30", status = "unknown", departure = FlightEnd(airport = dxb), arrival = FlightEnd(airport = del))
+        val now = Instant.parse("2026-11-21T08:00:00Z")
+        assert(f.endsAt()!!.isBefore(now))
+        assertEquals("Flown", f.statusInfo(now).label)
     }
 }

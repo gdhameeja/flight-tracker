@@ -60,8 +60,8 @@ fun TripsScreen(
     val now = Instant.now()
     // Still "upcoming" until 6 hours after landing, so the belt and landing stay on top
     val (upcoming, past) = state.flights.partition { t ->
-        val arr = Fmt.instant(t.flight.arrival.best) ?: Fmt.instant(t.flight.departure.best)
-        arr == null || Duration.between(arr, now).toHours() < 6
+        val end = t.flight.endsAt()
+        end == null || Duration.between(end, now).toHours() < 6
     }
 
     Scaffold(

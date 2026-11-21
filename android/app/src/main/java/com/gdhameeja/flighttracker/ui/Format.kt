@@ -67,13 +67,21 @@ private val IN_AIR = setOf("departed", "en_route", "approaching")
 
 fun Flight.isInAir() = status in IN_AIR
 
+/**
+ * When the flight is over: landing time, else take-off, else (bookings with no
+ * times in the email) the end of its date at the departure airport.
+ */
+fun Flight.endsAt(): Instant? =
+    Fmt.instant(arrival.best ?: departure.best)
+        ?: runCatching { java.time.LocalDate.parse(date).atTime(23, 59).atZone(Fmt.zone(departure.airport.timeZone)).toInstant() }.getOrNull()
+
 fun Flight.isFinished() = status == "arrived" || status == "cancelled" || status == "diverted"
 
 fun Flight.statusInfo(now: Instant = Instant.now()): StatusInfo {
     val depLate = Fmt.delayMinutes(departure) ?: 0
     val arrLate = Fmt.delayMinutes(arrival) ?: 0
     // Over, but never seen landing (history from email, or tracking stopped): just "Flown"
-    val over = Fmt.instant(arrival.best ?: departure.best)?.let { Duration.between(it, now).toHours() >= 2 } == true
+    val over = endsAt()?.let { Duration.between(it, now).toHours() >= 2 } == true
     if (over && status !in setOf("arrived", "cancelled", "diverted")) return StatusInfo("Flown", Tone.Neutral)
     return when (status) {
         "cancelled" -> StatusInfo("Cancelled", Tone.Bad)
