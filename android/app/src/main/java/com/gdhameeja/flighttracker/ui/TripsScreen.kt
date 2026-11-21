@@ -1,0 +1,119 @@
+package com.gdhameeja.flighttracker.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import com.gdhameeja.flighttracker.UiState
+import com.gdhameeja.flighttracker.data.TrackedFlight
+import java.time.Duration
+import java.time.Instant
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TripsScreen(
+    state: UiState,
+    snackbar: SnackbarHostState,
+    onRefresh: () -> Unit,
+    onOpen: (String) -> Unit,
+    onAdd: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val now = Instant.now()
+    // Still "upcoming" until 6 hours after landing, so the belt and landing stay on top
+    val (upcoming, past) = state.flights.partition { t ->
+        val arr = Fmt.instant(t.flight.arrival.best) ?: Fmt.instant(t.flight.departure.best)
+        arr == null || Duration.between(arr, now).toHours() < 6
+    }
+
+    Scaffold(
+        modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
+        topBar = {
+            LargeTopAppBar(
+                title = { Text("Flights") },
+                actions = {
+                    IconButton(onClick = onSettings) {
+                        BadgedBox(badge = { if (state.update != null || !state.connected) Badge() }) {
+                            Icon(Icons.Default.Settings, "Settings")
+                        }
+                    }
+                },
+                scrollBehavior = scroll,
+            )
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(onClick = onAdd, icon = { Icon(Icons.Default.Add, null) }, text = { Text("Add flight") })
+        },
+        snackbarHost = { SnackbarHost(snackbar) },
+    ) { pad ->
+        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = Modifier.padding(pad).fillMaxSize()) {
+            if (state.flights.isEmpty()) {
+                EmptyTrips(state.connected)
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    if (upcoming.isNotEmpty()) item { SectionTitle("Upcoming") }
+                    items(upcoming, key = { it.id }) { t -> FlightCard(t.flight, onClick = { onOpen(t.id) }) }
+                    if (past.isNotEmpty()) item { SectionTitle("Past") }
+                    items(past.reversed(), key = { it.id }) { t: TrackedFlight -> FlightCard(t.flight, onClick = { onOpen(t.id) }, dim = true) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyTrips(connected: Boolean) {
+    LazyColumn(Modifier.fillMaxSize()) {
+        item {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 96.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(PlaneIcon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(64.dp))
+                Spacer(Modifier.height(20.dp))
+                Text(if (connected) "No flights yet" else "Connect to your server", style = MaterialTheme.typography.headlineSmall)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (connected) "Add your next flight and it'll be tracked here, with alerts for delays, gate changes and your baggage belt."
+                    else "Open Settings (top right) and enter your server address and app token, or open the setup link.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+                )
+            }
+        }
+    }
+}

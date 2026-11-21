@@ -1,0 +1,71 @@
+[
+ {
+  "departure": {
+   "airport": {
+    "icao": "OMAA",
+    "iata": "AUH",
+    "name": "Abu Dhabi",
+    "location": {
+     "lat": 24.433,
+     "lon": 54.6511
+    },
+    "countryCode": "ae",
+    "timeZone": "Asia/Dubai"
+   },
+   "scheduledTime": {
+    "utc": "2026-11-20 20:30Z",
+    "local": "2026-11-21 00:30+04:00"
+   },
+   "revisedTime": {
+    "utc": "2026-11-20 20:30Z",
+    "local": "2026-11-21 00:30+04:00"
+   },
+   "terminal": "A",
+   "checkInDesk": "L6-L10",
+   "gate": "A3",
+   "quality": [
+    "Basic",
+    "Live"
+   ]
+  },
+  "arrival": {
+   "scheduledTime": {
+    "utc": "2026-11-21 00:21Z",
+    "local": "2026-11-21 05:51+05:30"
+   },
+   "revisedTime": {
+    "utc": "2026-11-21 00:21Z",
+    "local": "2026-11-21 05:51+05:30"
+   },
+   "terminal": "3",
+   "baggageBelt": "10",
+   "quality": [
+    "Basic",
+    "Live"
+   ],
+   "airport": {
+    "icao": "VIDP",
+    "iata": "DEL",
+    "name": "Delhi",
+    "location": {
+     "lat": 28.5665,
+     "lon": 77.1031
+    },
+    "countryCode": "in",
+    "timeZone": "Asia/Kolkata"
+   }
+  },
+  "number": "6E 1406",
+  "status": "Arrived",
+  "codeshareStatus": "IsOperator",
+  "isCargo": false,
+  "aircraft": {
+   "model": "Airbus A320"
+  },
+  "airline": {
+   "name": "IndiGo",
+   "iata": "6E",
+   "icao": "IGO"
+  }
+ }
+]

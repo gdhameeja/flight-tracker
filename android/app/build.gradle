@@ -1,0 +1,63 @@
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+apply plugin: 'org.jetbrains.kotlin.plugin.serialization'
+
+android {
+    namespace = "com.gdhameeja.flighttracker"
+    compileSdk = 36
+    defaultConfig {
+        applicationId "com.gdhameeja.flighttracker"
+        minSdk 26
+        targetSdk 36
+        // docker/build-apk.sh passes the git commit count: every newer commit
+        // installs over the last one, and the app can spot newer releases
+        versionCode((project.findProperty("versionCode") ?: "1") as Integer)
+        versionName((project.findProperty("versionName") ?: "1.0") as String)
+        // Where "Check for updates" looks for new APKs
+        buildConfigField "String", "GITHUB_REPO", '"gdhameeja/flight-tracker"'
+        // Your Cloudflare Worker (not a secret: every request also needs the app token)
+        buildConfigField "String", "DEFAULT_SERVER_URL", '"https://flight-tracker.gdhameeja.workers.dev"'
+    }
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    def composeBom = platform('androidx.compose:compose-bom:2025.08.00')
+    implementation composeBom
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-core'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.activity:activity-compose:1.11.0'
+    implementation 'androidx.core:core-ktx:1.17.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.9.2'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.9.2'
+    implementation 'androidx.navigation:navigation-compose:2.9.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    // Push notifications (Firebase Cloud Messaging)
+    implementation platform('com.google.firebase:firebase-bom:35.2.0')
+    implementation 'com.google.firebase:firebase-messaging'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2'
+    testImplementation 'junit:junit:4.13.2'
+}
+
+// google-services.json is git-ignored: on GitHub it comes from the
+// GOOGLE_SERVICES_JSON_B64 secret. Without it the app builds, minus push alerts.
+if (file('google-services.json').exists()) {
+    apply plugin: 'com.google.gms.google-services'
+} else {
+    logger.warn("google-services.json missing: building without push notifications")
+}

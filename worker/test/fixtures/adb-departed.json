@@ -1,0 +1,66 @@
+[
+ {
+  "departure": {
+   "scheduledTime": {
+    "utc": "2026-11-21 00:23Z",
+    "local": "2026-11-21 05:53+05:30"
+   },
+   "revisedTime": {
+    "utc": "2026-11-21 00:23Z",
+    "local": "2026-11-21 05:53+05:30"
+   },
+   "terminal": "2",
+   "gate": "T30",
+   "quality": [
+    "Basic",
+    "Live"
+   ],
+   "airport": {
+    "icao": "VIDP",
+    "iata": "DEL",
+    "name": "Delhi",
+    "location": {
+     "lat": 28.5665,
+     "lon": 77.1031
+    },
+    "countryCode": "in",
+    "timeZone": "Asia/Kolkata"
+   }
+  },
+  "arrival": {
+   "airport": {
+    "icao": "VABJ",
+    "iata": "BHJ",
+    "name": "Bhuj",
+    "location": {
+     "lat": 23.2878,
+     "lon": 69.6702
+    },
+    "countryCode": "in",
+    "timeZone": "Asia/Kolkata"
+   },
+   "scheduledTime": {
+    "utc": "2026-11-21 02:10Z",
+    "local": "2026-11-21 07:40+05:30"
+   },
+   "quality": [
+    "Basic"
+   ]
+  },
+  "number": "AI 1712",
+  "callSign": "AIC9DM",
+  "status": "Departed",
+  "codeshareStatus": "IsOperator",
+  "isCargo": false,
+  "aircraft": {
+   "reg": "VT-TQM",
+   "modeS": "8014ED",
+   "model": "Airbus A320 NEO"
+  },
+  "airline": {
+   "name": "Air India",
+   "iata": "AI",
+   "icao": "AIC"
+  }
+ }
+]

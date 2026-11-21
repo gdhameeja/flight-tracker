@@ -1,0 +1,13 @@
+# Keys and secrets: never commit
+.dev.vars
+*.keystore
+google-services.json
+firebase-service-account*.json
+client_secret*.json
+node_modules/
+.wrangler/
+build/
+.gradle/
+.android-user/
+.secrets/
+*:Zone.Identifier
