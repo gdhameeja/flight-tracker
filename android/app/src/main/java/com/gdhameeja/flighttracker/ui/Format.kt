@@ -72,6 +72,9 @@ fun Flight.isFinished() = status == "arrived" || status == "cancelled" || status
 fun Flight.statusInfo(now: Instant = Instant.now()): StatusInfo {
     val depLate = Fmt.delayMinutes(departure) ?: 0
     val arrLate = Fmt.delayMinutes(arrival) ?: 0
+    // Over, but never seen landing (history from email, or tracking stopped): just "Flown"
+    val over = Fmt.instant(arrival.best ?: departure.best)?.let { Duration.between(it, now).toHours() >= 2 } == true
+    if (over && status !in setOf("arrived", "cancelled", "diverted")) return StatusInfo("Flown", Tone.Neutral)
     return when (status) {
         "cancelled" -> StatusInfo("Cancelled", Tone.Bad)
         "diverted" -> StatusInfo("Diverted", Tone.Bad)
@@ -82,7 +85,7 @@ fun Flight.statusInfo(now: Instant = Instant.now()): StatusInfo {
         else -> when {
             depLate >= 15 -> StatusInfo("Delayed ${Fmt.duration(depLate)}", Tone.Warn)
             status == "check_in" -> StatusInfo("Check-in open", Tone.Good)
-            Fmt.instant(departure.best)?.let { Duration.between(now, it).toHours() < 48 } == true -> StatusInfo("On time", Tone.Good)
+            Fmt.instant(departure.best)?.let { Duration.between(now, it).toHours() in 0..47 } == true -> StatusInfo("On time", Tone.Good)
             else -> StatusInfo("Scheduled", Tone.Neutral)
         }
     }

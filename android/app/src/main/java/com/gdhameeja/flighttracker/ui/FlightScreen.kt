@@ -118,6 +118,17 @@ fun FlightScreen(
                     }
                 }
 
+                tracked.booking?.takeIf { it.pnr != null || it.seats != null || it.passengers.isNotEmpty() }?.let { b ->
+                    item { SectionTitle("Booking") }
+                    item {
+                        DetailCard {
+                            b.pnr?.let { DetailRow("Booking reference", it) }
+                            b.seats?.let { DetailRow("Seat", it) }
+                            if (b.passengers.isNotEmpty()) DetailRow(if (b.passengers.size == 1) "Passenger" else "Passengers", b.passengers.joinToString(", "))
+                        }
+                    }
+                }
+
                 item { SectionTitle("Departure") }
                 item { EndDetails(f.departure, isDeparture = true) }
                 item { SectionTitle("Arrival") }

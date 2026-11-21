@@ -6,6 +6,7 @@
 import { diff } from "./changes";
 import type { Flight, FlightEvent } from "./model";
 import { fetchFlight, ProviderError } from "./providers/aerodatabox";
+import { HISTORY_DAYS, scanGmail } from "./importer";
 import { sendPush, type ServiceAccount } from "./push";
 import { nextCheckAt } from "./schedule";
 
@@ -15,7 +16,14 @@ export interface Env {
   AERODATABOX_KEY: string;
   /** Firebase service-account JSON; without it alerts aren't pushed */
   FCM_SERVICE_ACCOUNT?: string;
+  AI: Ai;
+  GMAIL_CLIENT_ID?: string;
+  GMAIL_CLIENT_SECRET?: string;
+  GMAIL_REFRESH_TOKEN?: string;
 }
+
+/** Gmail is checked for new bookings this often: bookings are made days ahead, so no hurry. */
+const GMAIL_EVERY_MS = 3 * 3600_000;
 
 /** Scheduled checks stop when fewer units than this are left; the rest are for refreshing by hand. */
 const CRON_RESERVE_UNITS = 40;
@@ -50,7 +58,13 @@ export default {
   },
 
   async scheduled(_ctrl: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(runDueChecks(env));
+    ctx.waitUntil(
+      (async () => {
+        await runDueChecks(env);
+        await runGmailScan(env, false).catch((e) => console.error("Gmail scan failed", e));
+        await deliverPending(env);
+      })(),
+    );
   },
 } satisfies ExportedHandler<Env>;
 
@@ -71,6 +85,8 @@ async function route(req: Request, env: Env): Promise<Response> {
   if (path === "/api/flights" && m === "GET") return json({ flights: await listFlights(env) });
   if (path === "/api/flights" && m === "POST") return addFlight(req, env);
   if (path === "/api/usage" && m === "GET") return json(await usage(env));
+  if (path === "/api/gmail/scan" && m === "POST") return json(await runGmailScan(env, true));
+  if (path === "/api/gmail/status" && m === "GET") return json(await gmailStatus(env));
   if (path === "/api/push-token" && m === "POST") {
     const { token } = (await req.json().catch(() => ({}))) as { token?: string };
     if (!token) throw new HttpError(400, "token missing");
@@ -139,11 +155,13 @@ async function flightView(env: Env, row: FlightRow) {
   const events = (
     await env.DB.prepare("select at, kind, title, body from events where flight_id = ? order by at").bind(row.id).all<{ at: number; kind: string; title: string; body: string }>()
   ).results.map((e) => ({ ...e, at: new Date(e.at).toISOString() }));
+  const b = await env.DB.prepare("select pnr, seats, passengers, airline_name from bookings where flight_id = ?").bind(row.id).first<{ pnr: string | null; seats: string | null; passengers: string | null; airline_name: string | null }>();
   return {
     id: row.id,
     flight: JSON.parse(row.data) as Flight,
     nextCheckAt: row.next_check_at ? new Date(row.next_check_at).toISOString() : null,
     events,
+    booking: b ? { pnr: b.pnr, seats: b.seats, passengers: b.passengers ? (JSON.parse(b.passengers) as string[]) : [], airlineName: b.airline_name } : null,
   };
 }
 
@@ -233,6 +251,32 @@ async function runDueChecks(env: Env) {
     }
   }
   await deliverPending(env);
+}
+
+// ── Gmail import ────────────────────────────────────────────────────────────
+
+/** First the history (HISTORY_DAYS back, a batch per run), then new emails. */
+async function runGmailScan(env: Env, manual: boolean) {
+  if (!env.GMAIL_REFRESH_TOKEN) return { enabled: false };
+  const last = Number((await getMeta(env, "gmail_last_scan")) ?? 0);
+  const historyDone = (await getMeta(env, "gmail_history_done")) === "1";
+  if (!manual && historyDone && Date.now() - last < GMAIL_EVERY_MS) return { enabled: true, skipped: true };
+  await setMeta(env, "gmail_last_scan", String(Date.now()));
+  const r = await scanGmail(env, { sinceDays: historyDone ? 14 : HISTORY_DAYS });
+  if (!historyDone && r.remaining === 0) await setMeta(env, "gmail_history_done", "1");
+  await setMeta(env, "gmail_last_result", JSON.stringify({ ...r, at: new Date().toISOString() }));
+  return { enabled: true, ...r };
+}
+
+async function gmailStatus(env: Env) {
+  const count = await env.DB.prepare("select count(*) as n, sum(result like '%flights%') as bookings from gmail_seen").first<{ n: number; bookings: number }>();
+  return {
+    enabled: !!env.GMAIL_REFRESH_TOKEN,
+    emailsRead: count?.n ?? 0,
+    bookingEmails: count?.bookings ?? 0,
+    historyDone: (await getMeta(env, "gmail_history_done")) === "1",
+    last: JSON.parse((await getMeta(env, "gmail_last_result")) ?? "null"),
+  };
 }
 
 // ── Push alerts ─────────────────────────────────────────────────────────────

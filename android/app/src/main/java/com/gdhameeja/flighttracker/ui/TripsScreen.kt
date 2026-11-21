@@ -22,6 +22,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarHost
@@ -29,6 +31,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -50,6 +56,7 @@ fun TripsScreen(
     onSettings: () -> Unit,
 ) {
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    var tab by rememberSaveable { mutableIntStateOf(0) }
     val now = Instant.now()
     // Still "upcoming" until 6 hours after landing, so the belt and landing stay on top
     val (upcoming, past) = state.flights.partition { t ->
@@ -77,21 +84,38 @@ fun TripsScreen(
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { pad ->
-        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = Modifier.padding(pad).fillMaxSize()) {
-            if (state.flights.isEmpty()) {
-                EmptyTrips(state.connected)
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    if (upcoming.isNotEmpty()) item { SectionTitle("Upcoming") }
-                    items(upcoming, key = { it.id }) { t -> FlightCard(t.flight, onClick = { onOpen(t.id) }) }
-                    if (past.isNotEmpty()) item { SectionTitle("Past") }
-                    items(past.reversed(), key = { it.id }) { t: TrackedFlight -> FlightCard(t.flight, onClick = { onOpen(t.id) }, dim = true) }
+        Column(Modifier.padding(pad).fillMaxSize()) {
+            PrimaryTabRow(selectedTabIndex = tab) {
+                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(if (upcoming.isEmpty()) "Upcoming" else "Upcoming (${upcoming.size})") })
+                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text(if (past.isEmpty()) "Past" else "Past (${past.size})") })
+            }
+            PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+                val list = if (tab == 0) upcoming else past.reversed()
+                if (list.isEmpty()) {
+                    if (tab == 0) EmptyTrips(state.connected) else EmptyPast()
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        items(list, key = { it.id }) { t: TrackedFlight -> FlightCard(t.flight, onClick = { onOpen(t.id) }) }
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyPast() {
+    LazyColumn(Modifier.fillMaxSize()) {
+        item {
+            Text(
+                "Flights you've taken show up here.",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(48.dp),
+            )
         }
     }
 }

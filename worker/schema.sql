@@ -32,3 +32,22 @@ create table if not exists meta (
   key text primary key,
   value text not null
 );
+
+-- Booking details found in email: confirmation code, seats, who's flying
+create table if not exists bookings (
+  flight_id text primary key references flights (id) on delete cascade,
+  pnr text,
+  seats text,
+  passengers text,
+  airline_name text,
+  message_id text,
+  subject text,
+  updated_at integer not null
+);
+
+-- Emails already read by the Gmail import, so each is read once
+create table if not exists gmail_seen (
+  message_id text primary key,
+  at integer not null,
+  result text not null          -- "flights:2", "none", "skipped", "error: ..."
+);

@@ -56,6 +56,15 @@ data class Flight(
 @Serializable
 data class FlightEvent(val at: String, val kind: String, val title: String, val body: String)
 
+/** Found in your booking email. */
+@Serializable
+data class Booking(
+    val pnr: String? = null,
+    val seats: String? = null,
+    val passengers: List<String> = emptyList(),
+    val airlineName: String? = null,
+)
+
 /** A tracked flight as the server returns it. */
 @Serializable
 data class TrackedFlight(
@@ -63,6 +72,7 @@ data class TrackedFlight(
     val flight: Flight,
     val nextCheckAt: String? = null,
     val events: List<FlightEvent> = emptyList(),
+    val booking: Booking? = null,
 )
 
 @Serializable
